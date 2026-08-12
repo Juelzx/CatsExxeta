@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -22,7 +21,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.catsexxeta.feature.breedDetail.BreedDetailScreen
 import com.example.catsexxeta.feature.breeds.BreedListRoute
-import com.example.catsexxeta.feature.discover.DiscoverScreen
 import com.example.catsexxeta.feature.favorites.FavoritesScreen
 
 private data class TopLevelDestination(
@@ -33,7 +31,6 @@ private data class TopLevelDestination(
 
 private val topLevelDestinations = listOf(
     TopLevelDestination(BreedsRoute, "Breeds", Icons.Filled.Home),
-    TopLevelDestination(DiscoverRoute, "Discover", Icons.Filled.Search),
     TopLevelDestination(FavoritesRoute, "Favorites", Icons.Filled.Favorite)
 )
 
@@ -89,9 +86,6 @@ fun CatNavHost(modifier: Modifier = Modifier) {
                     breedId = route.breedId,
                     onBack = { navController.popBackStack() }
                 )
-            }
-            composable<DiscoverRoute> {
-                DiscoverScreen()
             }
             composable<FavoritesRoute> {
                 FavoritesScreen()

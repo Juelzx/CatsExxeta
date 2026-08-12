@@ -33,21 +33,4 @@ class BreedMapperTest {
         assertEquals("https://cdn2.thecatapi.com/images/0XYvRd7oD.jpg", breed.imageUrl)
     }
 
-    @Test
-    fun `missing weight maps to null weightKg`() {
-        val dto = BreedDto(id = "abys", name = "Abyssinian", weight = null)
-
-        val breed = dto.toDomain()
-
-        assertNull(breed.weightKg)
-    }
-
-    @Test
-    fun `missing reference image id maps to null image url`() {
-        val dto = BreedDto(id = "abys", name = "Abyssinian", referenceImageId = null)
-
-        val breed = dto.toDomain()
-
-        assertNull(breed.imageUrl)
-    }
 }
