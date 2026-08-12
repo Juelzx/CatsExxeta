@@ -21,7 +21,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.catsexxeta.feature.breedDetail.BreedDetailScreen
-import com.example.catsexxeta.feature.breeds.BreedListScreen
+import com.example.catsexxeta.feature.breeds.BreedListRoute
 import com.example.catsexxeta.feature.discover.DiscoverScreen
 import com.example.catsexxeta.feature.favorites.FavoritesScreen
 
@@ -77,8 +77,8 @@ fun CatNavHost(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable<BreedsRoute> {
-                BreedListScreen(
-                    onBreedClick = { breedId ->
+                BreedListRoute(
+                    onNavigateToDetail = { breedId ->
                         navController.navigate(BreedDetailRoute(breedId))
                     }
                 )

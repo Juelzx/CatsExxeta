@@ -8,7 +8,6 @@ import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.header
-import io.ktor.client.request.url
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
@@ -37,6 +36,8 @@ fun createHttpClient(
         level = if (enableLogging) LogLevel.INFO else LogLevel.NONE
         sanitizeHeader { header -> header == CatApiConfig.API_KEY_HEADER }
     }
+
+    expectSuccess = true
 
     defaultRequest {
         url(CatApiConfig.BASE_URL)

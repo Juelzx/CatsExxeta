@@ -1,5 +1,7 @@
 package com.example.catsexxeta.di
 
 val appModules = listOf(
-    networkModule
+    networkModule,
+    dataModule,
+    viewModelModule
 )

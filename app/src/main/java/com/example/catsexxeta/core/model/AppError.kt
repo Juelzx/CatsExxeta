@@ -8,3 +8,5 @@ sealed interface AppError {
     data object Server : AppError
     data object Unknown : AppError
 }
+
+class AppException(val error: AppError, cause: Throwable? = null) : Exception(cause)

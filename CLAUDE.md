@@ -1,121 +1,48 @@
 # CLAUDE.md — Cat Explorer
 
-## Project Context
+Notes for working on this project. Built with The Cat API
+(https://thecatapi.com). Native Android, not KMP — even though I picked Ktor
+over Retrofit for networking, the goal isn't to actually go multiplatform right
+now, just to not paint myself into a corner if that becomes relevant later. So:
+Compose (not Compose Multiplatform), plain Android, Ktor for the network layer.
 
-Build a native Android application for a Mobile coding challenge using **The Cat API**.
+## Stack
 
-This is a native Android implementation.
+Kotlin, Jetpack Compose, Material 3, Coroutines/Flow, Ktor Client,
+kotlinx.serialization, Koin, Navigation Compose, Coil, Gradle Kotlin DSL.
+Nothing beyond that unless there's a real reason — I'd rather keep the dependency
+list short than pull in something "because it's standard."
 
-The company also works with Kotlin Multiplatform, so the project should demonstrate strong Kotlin fundamentals and use **Ktor Client for networking** instead of Retrofit. The use of Ktor is intentional because the networking layer should be easily portable to Kotlin Multiplatform in a future iteration.
+## Why Ktor instead of Retrofit
 
-Do **not** turn this project into a KMP project.
+Mostly this: I want the networking layer to stay Kotlin-first, since it's the part
+of the app most likely to get reused if this ever ends up as a shared module.
+Retrofit works fine too, but Ktor doesn't need annotation processing and plays
+nicer if this code ever moves outside androidJar. Not a KMP project though — I
+don't want expect/actual stubs or a shared module scaffolded just for the sake of
+looking portable. If it stays Android-only forever, that's completely fine.
 
-Do **not** use Compose Multiplatform.
+## Architecture — MVI, unidirectional
 
-Use native Android technologies.
-
----
-
-# 1. Technology Stack
-
-Use:
-
-* Kotlin
-* Android
-* Jetpack Compose
-* Material 3
-* Coroutines
-* Flow / StateFlow
-* Ktor Client
-* kotlinx.serialization
-* Koin
-* AndroidX Navigation Compose
-* Coil for image loading
-* Gradle Kotlin DSL
-
-Prefer current stable versions already compatible with the project.
-
-Do not introduce unnecessary libraries.
-
----
-
-# 2. Architecture
-
-Use **MVI with unidirectional data flow**.
-
-The architecture should be:
-
-```text
-Compose UI
-    ↓
-Intent
-    ↓
-MVI ViewModel / Store
-    ↓
-Repository
-    ↓
-Ktor API Client
-    ↓
-The Cat API
+```
+Compose UI → Intent → ViewModel (MVI store) → Repository → Ktor → Cat API
 ```
 
-For persistence:
+and for anything persisted:
 
-```text
-ViewModel
-    ↓
-Repository
-    ├── Remote Data Source
-    └── Local Data Source
+```
+ViewModel → Repository → { Remote source, Local source }
 ```
 
-The UI must never communicate directly with Ktor.
+The important part: UI never talks to Ktor or the repository directly, only
+through intents. I keep catching myself wanting to write `viewModel.loadBreeds()`
+out of habit — that's the MVVM instinct and it's wrong here. It should always be
+`viewModel.onIntent(BreedIntent.Load)`. If I see a public function on a
+ViewModel that isn't `onIntent`, something's drifted back into MVVM territory and
+needs fixing.
 
-The UI must never access repositories directly.
-
-The UI communicates exclusively through intents/actions.
-
----
-
-# 3. Important Architectural Rule
-
-Do NOT implement MVVM-style state mutation.
-
-Although Android `ViewModel` may be used as the lifecycle-aware host for the MVI state, it must behave as an **MVI Store**, not as a traditional MVVM ViewModel.
-
-Avoid patterns such as:
-
-```kotlin
-viewModel.loadBreeds()
-viewModel.searchBreeds()
-viewModel.vote()
-```
-
-Prefer:
-
-```kotlin
-viewModel.onIntent(BreedIntent.Load)
-viewModel.onIntent(BreedIntent.SearchChanged(query))
-viewModel.onIntent(BreedIntent.Vote(imageId, value))
-```
-
-All user actions should enter through the intent pipeline.
-
----
-
-# 4. MVI Structure
-
-Each feature should have:
-
-```text
-Intent
-State
-Effect
-ViewModel / Store
-Screen
-```
-
-Example:
+Each feature gets its own Intent / State / Effect / ViewModel / Screen. Something
+like:
 
 ```kotlin
 sealed interface BreedListIntent {
@@ -124,260 +51,100 @@ sealed interface BreedListIntent {
     data class BreedClicked(val breedId: String) : BreedListIntent
     data object Retry : BreedListIntent
 }
-```
 
-State:
-
-```kotlin
 data class BreedListState(
     val breeds: List<Breed> = emptyList(),
     val searchQuery: String = "",
     val isLoading: Boolean = false,
     val error: AppError? = null
 )
-```
 
-Effects:
-
-```kotlin
 sealed interface BreedListEffect {
     data class NavigateToBreed(val breedId: String) : BreedListEffect
     data class ShowMessage(val message: String) : BreedListEffect
 }
 ```
 
-Expose:
+State stays immutable from the UI's side — expose `StateFlow`, never the mutable
+version. State changes go through `.update { it.copy(...) }`, not scattered field
+mutations somewhere in the middle of a function.
 
-```kotlin
-val state: StateFlow<BreedListState>
-val effects: Flow<BreedListEffect>
+## Folder structure
+
+Feature-oriented, roughly:
+
 ```
-
-The state must be immutable from the UI.
-
----
-
-# 5. State Flow
-
-Use a single source of truth.
-
-Prefer:
-
-```kotlin
-private val _state = MutableStateFlow(BreedListState())
-val state = _state.asStateFlow()
-```
-
-Never expose `MutableStateFlow`.
-
-State transitions should be explicit and predictable.
-
-Prefer:
-
-```kotlin
-_state.update {
-    it.copy(
-        isLoading = true,
-        error = null
-    )
-}
-```
-
-over scattered mutable properties.
-
----
-
-# 6. Package Structure
-
-Use feature-oriented organization.
-
-Recommended:
-
-```text
 app/
-├── core/
-│   ├── network/
-│   ├── designsystem/
-│   ├── model/
-│   └── util/
-│
-├── data/
-│   ├── remote/
-│   │   ├── CatApi.kt
-│   │   └── dto/
-│   ├── local/
-│   └── repository/
-│
+├── core/            (network, designsystem, model, util)
+├── data/            (remote + dto, local, repository)
 ├── feature/
 │   ├── breeds/
-│   │   ├── BreedListScreen.kt
-│   │   ├── BreedListViewModel.kt
-│   │   ├── BreedListIntent.kt
-│   │   ├── BreedListState.kt
-│   │   └── BreedListEffect.kt
-│   │
 │   ├── breedDetail/
-│   │
 │   ├── discover/
-│   │
 │   └── favorites/
-│
 ├── navigation/
-│
 └── di/
 ```
 
-Do not create layers that have no meaningful responsibility.
+I don't add a layer unless it's actually doing something. An empty "manager"
+class or a repository interface with one implementation and no real reason to
+swap it isn't worth the indirection.
 
----
+## Domain models vs DTOs
 
-# 7. Domain Models vs API DTOs
+DTOs never touch Compose. `BreedDto` (the `@Serializable` API shape) gets mapped
+to a `Breed` domain model before it leaves the data layer — that mapping is what
+keeps the API contract from leaking upward, and it's also what makes this code
+realistic to lift into a shared module someday without dragging serialization
+annotations into the UI layer.
 
-Never expose API DTOs directly to Compose.
+## Networking
 
-Example:
-
-```kotlin
-@Serializable
-data class BreedDto(...)
-```
-
-Map into:
-
-```kotlin
-data class Breed(
-    val id: String,
-    val name: String,
-    val description: String?,
-    val origin: String?,
-    val temperament: String?,
-    val lifeSpan: String?,
-    val imageUrl: String?
-)
-```
-
-The API contract should remain isolated inside the data layer.
-
-This is important because the networking layer should be easily extractable into a KMP shared module later.
-
----
-
-# 8. Networking — Ktor
-
-Use **Ktor Client** for every network request.
-
-Do NOT use Retrofit.
-
-Do NOT use Volley.
-
-Do NOT mix networking libraries.
-
-Configure one shared Ktor `HttpClient` through dependency injection.
-
-Use:
-
-* ContentNegotiation
-* kotlinx.serialization
-* Logging
-* HttpTimeout
-* response validation
-
-Example:
+Ktor everywhere, one shared `HttpClient` via DI. Needs ContentNegotiation +
+kotlinx.serialization, HttpTimeout, Logging, and response validation turned on.
+Logging should drop to `LogLevel.NONE` (or close to it) for release — and under
+no circumstances should the API key end up in a log line, sanitize that header
+explicitly.
 
 ```kotlin
 HttpClient(Android) {
     install(ContentNegotiation) {
-        json(
-            Json {
-                ignoreUnknownKeys = true
-                explicitNulls = false
-                isLenient = true
-            }
-        )
+        json(Json {
+            ignoreUnknownKeys = true
+            explicitNulls = false
+            isLenient = true
+        })
     }
-
     install(HttpTimeout) {
         requestTimeoutMillis = 15_000
         connectTimeoutMillis = 10_000
         socketTimeoutMillis = 15_000
     }
-
-    install(Logging) {
-        level = LogLevel.INFO
-    }
+    install(Logging) { level = LogLevel.INFO }
 }
 ```
 
-Use `LogLevel.NONE` or reduced logging for release builds.
-
-Never log API keys or sensitive data.
-
----
-
-# 9. API Service
-
-Create a typed API abstraction.
-
-For example:
+API surface should be a typed interface, e.g. something like:
 
 ```kotlin
 interface CatApi {
-
     suspend fun getBreeds(): List<BreedDto>
-
-    suspend fun searchImages(
-        breedId: String? = null,
-        page: Int = 0,
-        limit: Int = 20
-    ): List<CatImageDto>
-
-    suspend fun vote(
-        imageId: String,
-        value: Int
-    )
-
-    suspend fun addFavorite(
-        imageId: String
-    )
-
-    suspend fun removeFavorite(
-        favoriteId: String
-    )
+    suspend fun searchImages(breedId: String? = null, page: Int = 0, limit: Int = 20): List<CatImageDto>
+    suspend fun vote(imageId: String, value: Int)
+    suspend fun addFavorite(imageId: String)
+    suspend fun removeFavorite(favoriteId: String)
 }
 ```
 
-Use the actual current The Cat API documentation to determine:
+Check the actual current Cat API docs for endpoints/params/response shapes rather
+than assuming — I don't want to guess at behavior that's one docs page away.
 
-* endpoints
-* HTTP methods
-* query parameters
-* request bodies
-* response models
-* authentication requirements
+API key goes through `local.properties` → BuildConfig, never hardcoded, never
+committed, and documented in the README so it's obvious how to set it up locally.
 
-Do not invent endpoint behavior.
+## Errors
 
----
-
-# 10. API Key
-
-Do not hardcode secrets in Kotlin source code.
-
-If an API key is required:
-
-* use `local.properties` / BuildConfig or another local configuration mechanism
-* do not commit the key
-* document how to configure it in README
-
-Never print the API key in logs.
-
----
-
-# 11. Error Handling
-
-Never expose raw exceptions to the UI.
-
-Create:
+Raw exceptions don't reach the UI. Everything gets mapped into:
 
 ```kotlin
 sealed interface AppError {
@@ -390,33 +157,11 @@ sealed interface AppError {
 }
 ```
 
-Map Ktor exceptions and HTTP status codes into `AppError`.
+with user-facing copy like "You're offline, check your connection" for Network,
+"Something went wrong on our side" for Server, and so on. The UI should only ever
+reason about `AppError`, never about HTTP codes or Ktor exception types directly.
 
-The UI should only deal with application-level errors.
-
-Example:
-
-```text
-Network
-→ "You're offline. Check your connection."
-
-Timeout
-→ "The request took too long."
-
-Server
-→ "Something went wrong on our side."
-
-Unknown
-→ "Unable to load cats."
-```
-
----
-
-# 12. Repository
-
-Repositories abstract data access.
-
-Example:
+## Repository
 
 ```kotlin
 interface BreedRepository {
@@ -424,179 +169,50 @@ interface BreedRepository {
 }
 ```
 
-The repository is responsible for:
+Repository owns the API call, the DTO mapping, and (optionally) caching. The
+ViewModel shouldn't know Ktor exists, and definitely shouldn't know what a 503
+is.
 
-* calling the API
-* mapping DTOs
-* handling data-source concerns
-* optionally caching data
+## Breeds feature (build this first)
 
-The ViewModel must not know about Ktor.
+List + search/filter + detail + loading/error/empty states + retry.
+`LazyVerticalGrid` or similar. Each card: image, name, origin, maybe one more
+useful detail. Detail screen: name, image, origin, description, temperament,
+life span, weight — not literally every field the API returns, just what's
+actually useful to someone looking at a cat breed.
 
-The ViewModel must not know about HTTP status codes.
+## Image search / Discover
 
----
+Separate from the breed list — this hits `/images/search`, optionally filtered
+by breed. Grid, paginated, with its own loading/error states per page, and
+guard against firing duplicate pagination requests when the user scrolls fast.
+Don't try to load hundreds of images up front.
 
-# 13. Task 1 — Breeds
+## Vote
 
-Implement first.
-
-Required:
-
-* Load all cat breeds
-* Display breeds
-* Search/filter breeds
-* Open breed detail
-* Loading state
-* Error state
-* Empty state
-* Retry
-
-Use:
+Like/dislike, entirely through intents:
 
 ```kotlin
-LazyVerticalGrid
+data class Vote(val imageId: String, val value: Int) : DiscoverIntent
 ```
 
-or another appropriate lazy layout.
+Flow is tap → intent → ViewModel → repository → Ktor → result → new state/effect
+→ recompose. No API calls from inside a Composable, ever. Needs loading, success,
+and error feedback — a vote that silently fails isn't acceptable.
 
-Each breed card should contain:
+## Favorites
 
-* image
-* breed name
-* origin
-* relevant short information
+Only if there's time left after Discover + Vote are solid. Add/remove, list,
+empty/loading/error states. The Discover grid should reflect favorite status
+immediately after toggling it — I don't want two screens disagreeing about
+whether something's favorited because they're reading from different sources of
+truth.
 
----
+## Offline / bad network
 
-# 14. Breed Detail
-
-Display useful API information:
-
-* Name
-* Image
-* Origin
-* Description
-* Temperament
-* Life span
-* Weight
-* Relevant characteristics
-
-Do not display every available API property.
-
-Prioritize information that is useful to the user.
-
----
-
-# 15. Task 3 — Image Search
-
-Implement:
-
-* image search
-* optional breed filtering
-* image grid
-* pagination
-* image loading states
-* image error state
-* image detail
-
-Use lazy loading.
-
-Avoid downloading hundreds of images at once.
-
-Prevent duplicate pagination requests.
-
----
-
-# 16. Vote
-
-Implement Like and Dislike.
-
-All interactions must go through MVI intents.
-
-Example:
-
-```kotlin
-data class Vote(
-    val imageId: String,
-    val value: Int
-) : DiscoverIntent
-```
-
-Flow:
-
-```text
-User taps Like
-    ↓
-Vote intent
-    ↓
-ViewModel
-    ↓
-Repository
-    ↓
-Ktor
-    ↓
-API result
-    ↓
-New State / Effect
-    ↓
-Compose
-```
-
-Never call the API directly from a Composable.
-
-Provide:
-
-* loading state
-* success feedback
-* error feedback
-
----
-
-# 17. Favorites
-
-Implement only if time permits.
-
-Support:
-
-* add favorite
-* remove favorite
-* favorites list
-* empty state
-* loading state
-* error state
-
-The Discover screen should immediately reflect favorite state.
-
-Avoid maintaining multiple unrelated sources of truth.
-
----
-
-# 18. Offline / Poor Network
-
-The application should behave gracefully when the network is unavailable.
-
-At minimum:
-
-* display useful error states
-* provide Retry
-* preserve already loaded data where possible
-* avoid replacing existing content with a blank screen
-* optionally cache the breed list
-
-If persistence is implemented, keep it behind a repository/local data-source abstraction.
-
-Do not build an unnecessarily complicated synchronization system for the coding challenge.
-
----
-
-# 19. Persistence
-
-If implementing persistence, use a modern Android-compatible solution such as Room.
-
-However, because this project uses Ktor to demonstrate KMM readiness, keep the persistence abstraction independent from Android-specific database APIs.
-
-Example:
+At minimum: real error states, a retry action, and don't nuke already-loaded
+content just because a refresh failed. If breed list caching happens, keep the
+persistence behind a small abstraction like:
 
 ```kotlin
 interface BreedLocalDataSource {
@@ -605,37 +221,18 @@ interface BreedLocalDataSource {
 }
 ```
 
-The repository should decide when to use local vs remote data.
+so the repository decides remote vs local, and it's not wired straight to
+Android's DB APIs everywhere. Not trying to build a sync engine here — just
+graceful degradation.
 
----
+## DI
 
-# 20. Dependency Injection
+Koin, providing HttpClient, CatApi, repositories, local sources, ViewModels.
+No manual instantiation inside Composables, no reaching for globals.
 
-Use Koin.
+## Compose conventions
 
-Provide:
-
-```text
-HttpClient
-CatApi
-Repositories
-Local Data Sources
-ViewModels
-```
-
-Do not instantiate dependencies manually inside Composables.
-
-Avoid global singleton access.
-
----
-
-# 21. Compose
-
-Use Jetpack Compose.
-
-Screens should be mostly stateless where practical.
-
-Prefer:
+Screens take state + an intent callback, not a ViewModel reference directly:
 
 ```kotlin
 @Composable
@@ -645,487 +242,96 @@ fun BreedListScreen(
 )
 ```
 
-rather than coupling the screen directly to a ViewModel.
+The route/container collects the ViewModel and passes state down. Keeps the
+screen previewable and testable without needing a real ViewModel around.
 
-The route/container can collect the ViewModel state and pass it to the UI.
+Reusable components where there's actual repetition — BreedCard, CatImageCard,
+FavoriteButton, VoteButtons, Loading/Error/Empty states, RetryButton. Not
+everything needs to be extracted; a one-off Row doesn't need its own file.
 
-This makes the UI easier to preview and test.
+Every network-backed screen should have an opinion about: loading, success,
+empty, error, refreshing, and pagination-loading. Designing only for the happy
+path is how you end up with a screen that just freezes on a bad connection.
 
----
+## Navigation
 
-# 22. UI Components
-
-Create reusable components where repetition exists:
-
-```text
-BreedCard
-CatImageCard
-FavoriteButton
-VoteButtons
-LoadingState
-ErrorState
-EmptyState
-RetryButton
-SectionHeader
-```
-
-Do not create a component for every tiny `Row` or `Column`.
-
----
-
-# 23. UI States
-
-Every network-driven screen should consider:
-
-```text
-Loading
-Success
-Empty
-Error
-Refreshing
-Pagination Loading
-```
-
-Do not design only for the successful API response.
-
----
-
-# 24. Navigation
-
-Use Navigation Compose.
-
-Recommended flow:
-
-```text
-Breeds
-   ↓
-Breed Detail
-
-Discover
-   ↓
-Cat Image Detail
-
-Favorites
-   ↓
-Cat Image Detail
-```
-
-Keep navigation centralized.
-
-Navigation should be triggered through MVI effects where appropriate.
-
-Example:
+Navigation Compose, roughly Breeds → Breed Detail, Discover → Image Detail,
+Favorites → Image Detail. Keep it centralized, and trigger navigation through
+MVI effects rather than passing NavController deep into feature code:
 
 ```kotlin
 sealed interface BreedListEffect {
-    data class NavigateToBreed(
-        val breedId: String
-    ) : BreedListEffect
+    data class NavigateToBreed(val breedId: String) : BreedListEffect
 }
 ```
 
----
+## Look and feel
 
-# 25. Design
+Modern, clean, a bit premium, image-focused — the cat photos should carry the
+visual weight, not the chrome around them. Material 3, rounded cards, consistent
+spacing, a real typography hierarchy, subtle elevation. Skip heavy gradients and
+animation for their own sake.
 
-The UI should feel:
+## Accessibility
 
-* modern
-* clean
-* premium
-* friendly
-* minimal
-* image-focused
+~48dp touch targets, real contrast, content descriptions that actually describe
+the action ("Add to favorites", "Like cat", "Retry loading breeds"), nothing
+conveyed by color alone, text that scales properly. This should be baked in as
+I build things, not bolted on at the end.
 
-Use Material 3.
+## Localization
 
-Use:
-
-* rounded cards
-* consistent spacing
-* strong typography hierarchy
-* subtle elevation
-* high-quality image presentation
-
-Avoid excessive colors, gradients and animations.
-
-The cat imagery should be the visual focus.
-
----
-
-# 26. Accessibility
-
-Ensure:
-
-* touch targets around 48dp
-* sufficient contrast
-* content descriptions
-* meaningful semantics
-* scalable typography
-* no important information conveyed only through color
-
-Examples:
-
-```text
-"Add to favorites"
-"Remove from favorites"
-"Like cat"
-"Dislike cat"
-"Open British Shorthair details"
-"Retry loading breeds"
-```
-
----
-
-# 27. Localization
-
-Do not hardcode user-facing strings inside Composables.
-
-Use Android resources:
-
-```text
-strings.xml
-```
-
-Prepare strings for:
-
-* screen titles
-* buttons
-* errors
-* empty states
-* accessibility labels
-
-Initial language can be English.
-
-The architecture should make German localization straightforward.
-
----
-
-# 28. Testing
-
-Prioritize meaningful tests.
-
-### Unit Tests
-
-Test:
-
-* DTO → domain mapping
-* API error mapping
-* breed search
-* repository behavior
-* pagination
-* MVI state transitions
-
-Example:
-
-```text
-Given a list of breeds
-When searching for "British"
-Then only matching breeds are returned
-```
-
-### MVI Tests
-
-Verify:
-
-```text
-Load
-→ Loading
-→ Success
-```
-
-and:
-
-```text
-Load
-→ Loading
-→ Error
-```
-
-and:
-
-```text
-Retry
-→ Loading
-→ Success
-```
-
-### UI Tests
-
-Implement only the most valuable UI tests if time permits.
-
-Do not sacrifice feature quality for test quantity.
-
----
-
-# 29. Coroutines
-
-Use structured concurrency.
-
-Never use:
-
-```kotlin
-GlobalScope
-```
-
-Use `viewModelScope`.
-
-Handle cancellation correctly.
-
-For search:
-
-* debounce user input
-* avoid unnecessary API calls
-* cancel obsolete work
-
-Do not trigger network requests for every individual keystroke.
-
----
-
-# 30. Performance
-
-Pay attention to:
-
-* LazyColumn/LazyGrid
-* stable keys
-* image caching
-* pagination
-* unnecessary recomposition
-* unnecessary API calls
-
-Use Coil for image loading and caching.
-
-Avoid expensive computation inside Composables.
-
----
-
-# 31. KMM Readiness
-
-Although this is **NOT a KMP project**, structure code with future portability in mind.
-
-Good candidates for future shared code:
-
-```text
-Domain models
-Repositories
-API models
-Ktor networking
-Error mapping
-Business logic
-MVI state logic
-```
-
-Avoid unnecessarily coupling these areas to Android UI classes.
-
-However:
-
-**Do not create fake expect/actual abstractions.**
-
-**Do not create a KMP module.**
-
-**Do not compromise the native Android implementation just to make it theoretically portable.**
-
-The goal is to demonstrate:
-
-> "I know how to write Kotlin and networking code that could later move into a KMP shared module."
-
----
-
-# 32. Do Not Overengineer
-
-This is a roughly 4-hour coding challenge.
-
-Do NOT create:
-
-* UseCase classes for every operation
-* Interactors
-* Managers
-* Event buses
-* custom navigation frameworks
-* custom networking abstractions on top of Ktor
-* generic repository frameworks
-* excessive interfaces
-* excessive modules
-* unnecessary design-system abstractions
-
-In particular:
-
-**Do not introduce UseCases just because a Clean Architecture template suggests them.**
-
-The preferred flow is:
-
-```text
-UI
- ↓
-MVI ViewModel
- ↓
-Repository
- ↓
-Ktor
-```
-
-Keep it simple.
-
----
-
-# 33. Implementation Priority
-
-Follow this order.
-
-## Phase 1 — Foundation
-
-1. Android project
-2. Jetpack Compose
-3. Material 3
-4. Koin
-5. Ktor
-6. kotlinx.serialization
-7. Navigation
-8. MVI base structure
-
-## Phase 2 — Task 1
-
-9. Breed API
-10. DTOs
-11. Domain models
-12. Repository
-13. Breed MVI
-14. Breed list
-15. Search
-16. Loading
-17. Error
-18. Retry
-19. Breed detail
-
-## Phase 3 — Task 3
-
-20. Image search
-21. Image grid
-22. Pagination
-23. Vote
-24. Favorites if time permits
-
-## Phase 4 — Quality
-
-25. Image caching
-26. Offline handling
-27. Accessibility
-28. Localization
-29. Unit tests
-30. UI polish
-
----
-
-# 34. Presentation Strategy
-
-The codebase should make it easy to explain these decisions during the interview:
-
-### Why MVI?
-
-* predictable state
-* unidirectional data flow
-* explicit user actions
-* easy testing
-
-### Why Ktor?
-
-The application is native Android, but Ktor keeps the networking layer Kotlin-first and makes the solution naturally transferable to KMP.
-
-### Why Repository?
-
-The UI/business layer should not care whether data comes from the API or local cache.
-
-### Why DTO → Domain mapping?
-
-The API contract should not leak into the UI.
-
-### Why StateFlow?
-
-A single observable state makes Compose rendering predictable.
-
-### Why Effects?
-
-Navigation and one-shot events should not be represented as persistent UI state.
-
----
-
-# 35. README
-
-Create a concise README containing:
-
-## Overview
-
-What the app does.
-
-## Tech Stack
-
-```text
-Kotlin
-Android
-Jetpack Compose
-Material 3
-Ktor
-Kotlinx Serialization
-Koin
-Coroutines / Flow
-Coil
-```
-
-## Architecture
-
-```text
-Compose UI
-    ↓
-MVI ViewModel
-    ↓
-Repository
-    ↓
-Ktor
-    ↓
-The Cat API
-```
-
-## Why Ktor?
-
-Explain that Ktor was deliberately selected instead of Retrofit because the company also works with Kotlin Multiplatform and Ktor allows the networking implementation to be easily shared in a future KMP architecture.
-
-## Error Handling
-
-Explain the error model and retry behavior.
-
-## Offline Strategy
-
-Explain caching and behavior when connectivity is unavailable.
+No hardcoded UI strings in Composables — everything through `strings.xml`, even
+if English is the only language shipped for now. The point is that adding German
+later should be a translation exercise, not a refactor.
 
 ## Testing
 
-Explain important test coverage.
+Focus on what's actually worth testing: DTO→domain mapping, error mapping,
+breed search/filter, repository behavior, pagination edge cases, and MVI state
+transitions (Load → Loading → Success, Load → Loading → Error,
+Retry → Loading → Success). UI tests only if there's time left over — I'd rather
+ship one fewer UI test and have the feature actually work.
 
-## Trade-offs
+## Coroutines
 
-Explicitly document what was intentionally not implemented due to the 4-hour challenge.
+`viewModelScope`, never `GlobalScope`, cancellation handled properly. Search
+input gets debounced — no firing a network request per keystroke.
 
----
+## Performance
 
-# Final Claude Code Rules
+Stable keys in lists, Coil for image loading/caching, pagination instead of
+loading everything, and keeping an eye on recomposition and avoiding heavy work
+directly inside Composables.
 
-1. This is a **native Android application**.
-2. Use **Jetpack Compose**, not Compose Multiplatform.
-3. Use **MVI**, not MVVM.
-4. Use **Ktor**, not Retrofit.
-5. Use **Koin** for DI.
-6. Use **Coroutines + Flow/StateFlow**.
-7. Keep API DTOs separate from domain models.
-8. Keep networking out of Composables.
-9. Keep UI state immutable.
-10. Use explicit MVI intents.
-11. Use effects for one-shot events/navigation.
-12. Do not introduce unnecessary UseCases.
-13. Do not overengineer.
-14. Prioritize the core challenge requirements first.
-15. Keep networking/domain code Kotlin-first and reasonably KMP-portable.
-16. Never compromise the native Android implementation just for theoretical KMP compatibility.
-17. Build and test frequently while implementing.
-18. Do not mark features as complete until they actually compile and work.
-19. Prefer a smaller polished implementation over a large unfinished one.
-20. Before finishing, run the relevant tests and verify the application builds successfully.
+## KMP readiness, without actually doing KMP
+
+Domain models, repositories, DTOs, the Ktor client, error mapping, and MVI state
+logic are the parts that would move cleanly into a shared module someday — so I
+try not to couple them to Android-specific classes where it's easy to avoid.
+That said: no KMP module, no fake expect/actual scaffolding, and I won't
+compromise the actual native implementation just to look portable on paper. If
+it never becomes KMP, none of this should have cost anything.
+
+## Staying lean
+
+Explicitly avoiding: a UseCase class for every single operation, Interactors,
+Managers, event buses, a custom navigation framework, a networking abstraction
+sitting on top of Ktor, a generic repository framework, interfaces that exist
+"just in case." The flow is UI → MVI ViewModel → Repository → Ktor, and that's
+enough — I don't need a Clean Architecture template's worth of layers for an app
+this size.
+
+## Rough build order
+
+1. Project setup — Compose, Material 3, Koin, Ktor, serialization, Navigation, MVI skeleton
+2. Breeds: API, DTOs, domain models, repository, MVI, list, search, loading/error/retry, detail
+3. Discover: image search, grid, pagination, vote, favorites (if time allows)
+4. Polish: image caching, offline handling, accessibility, localization, unit tests
+
+## README should cover
+
+What the app does, the tech stack, the architecture diagram, why Ktor over
+Retrofit, how errors/retry work, the offline strategy, what's tested, and — this
+part matters — an honest list of what got intentionally left out and why, rather
+than pretending everything's fully done.
