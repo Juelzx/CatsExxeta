@@ -9,7 +9,4 @@ data object BreedsRoute
 data class BreedDetailRoute(val breedId: String)
 
 @Serializable
-data object DiscoverRoute
-
-@Serializable
 data object FavoritesRoute
