@@ -63,12 +63,6 @@ fun BreedListScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-//        Text(
-//            text = "Cat Explorer",
-//            style = MaterialTheme.typography.headlineMedium,
-//            modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
-//        )
-
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = { onIntent(BreedListIntent.SearchChanged(it)) },
@@ -115,8 +109,8 @@ fun BreedListScreen(
 private fun BreedGrid(
     modifier: Modifier = Modifier,
     breeds: List<Breed>,
-    favoriteBreedIds: Set<String>,
     onBreedClick: (String) -> Unit,
+    favoriteBreedIds: Set<String>,
 //    onToggleFavorite: (String) -> Unit,
 ) {
     LazyVerticalGrid(

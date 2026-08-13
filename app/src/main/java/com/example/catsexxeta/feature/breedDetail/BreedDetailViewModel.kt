@@ -26,7 +26,7 @@ class BreedDetailViewModel(
     fun onIntent(intent: BreedDetailIntent) {
         when (intent) {
             is BreedDetailIntent.Load -> loadBreedDetail(intent.breedId)
-            BreedDetailIntent.Retry -> loadBreedDetail(breedId)
+            is BreedDetailIntent.Retry -> loadBreedDetail(breedId)
         }
     }
 

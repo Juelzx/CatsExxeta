@@ -7,5 +7,4 @@ data class BreedDetailState(
     val breed: Breed? = null,
     val isLoading: Boolean = false,
     val error: AppError? = null,
-
 )
